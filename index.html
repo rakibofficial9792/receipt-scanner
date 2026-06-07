@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Receipt → JSON</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0a0f;color:#e8e8f0;font-family:'Segoe UI',sans-serif;min-height:100vh;padding:28px 16px}
+.wrap{max-width:700px;margin:0 auto}
+.badge{display:inline-flex;align-items:center;gap:7px;background:rgba(0,255,136,.08);border:1px solid rgba(0,255,136,.2);border-radius:4px;padding:5px 11px;font-size:10px;color:#00ff88;letter-spacing:2px;margin-bottom:12px;font-family:monospace}
+.dot{width:6px;height:6px;border-radius:50%;background:#00ff88;animation:pulse 2s infinite}
+h1{font-size:clamp(26px,6vw,44px);font-weight:800;line-height:1.1;margin-bottom:6px}
+h1 span{color:#00ff88}
+.sub{color:#5a5a7a;font-size:12px;font-family:monospace;margin-bottom:24px}
+.api-row{display:flex;gap:8px;margin-bottom:20px}
+.api-input{flex:1;background:#12121a;border:1px solid #1e1e2e;border-radius:8px;padding:11px 14px;color:#e8e8f0;font-family:monospace;font-size:12px;outline:none}
+.api-input:focus{border-color:rgba(0,255,136,.4)}
+.api-btn{padding:11px 16px;background:rgba(0,255,136,.1);border:1px solid rgba(0,255,136,.3);border-radius:8px;color:#00ff88;font-family:monospace;font-size:11px;cursor:pointer;white-space:nowrap}
+.zone{border:2px dashed #1e1e2e;border-radius:12px;padding:40px 24px;text-align:center;cursor:pointer;background:#12121a;transition:all .3s;margin-bottom:16px}
+.zone:hover,.zone.drag{border-color:#00ff88;background:rgba(0,255,136,.04)}
+.zone-icon{font-size:40px;margin-bottom:10px}
+.zone-title{font-size:17px;font-weight:700;margin-bottom:5px}
+.zone-sub{font-size:11px;color:#5a5a7a;font-family:monospace}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px;margin-bottom:16px}
+.thumb{position:relative;aspect-ratio:3/4;border-radius:8px;overflow:hidden;border:2px solid #1e1e2e;background:#12121a;transition:border-color .2s}
+.thumb img{width:100%;height:100%;object-fit:cover}
+.thumb-badge{position:absolute;bottom:0;left:0;right:0;padding:4px;text-align:center;font-size:8px;font-family:monospace;font-weight:700;letter-spacing:1px}
+.thumb .remove{position:absolute;top:3px;right:3px;width:17px;height:17px;border-radius:50%;background:rgba(255,68,102,.85);border:none;color:white;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.scan-btn{width:100%;padding:15px;background:#1e1e2e;color:#5a5a7a;border:none;border-radius:8px;font-size:14px;font-weight:800;letter-spacing:1px;cursor:not-allowed;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px}
+.scan-btn.ready{background:#00ff88;color:#0a0a0f;cursor:pointer}
+.scan-btn.ready:hover{background:#00cc6e}
+.progress{margin-top:8px;height:3px;background:#1e1e2e;border-radius:99px;overflow:hidden;display:none}
+.progress-fill{height:100%;background:#00ff88;border-radius:99px;transition:width .4s;width:0}
+.error{margin-top:14px;padding:12px 16px;background:rgba(255,68,102,.08);border:1px solid rgba(255,68,102,.25);border-radius:8px;color:#ff4466;font-family:monospace;font-size:11px;display:none}
+.output{margin-top:30px;display:none}
+.out-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px}
+.out-title{font-size:10px;font-family:monospace;color:#00ff88;letter-spacing:2px}
+.out-actions{display:flex;gap:8px}
+.out-btn{padding:6px 12px;border-radius:6px;border:1px solid #1e1e2e;background:#12121a;color:#e8e8f0;font-family:monospace;font-size:10px;cursor:pointer;transition:all .2s}
+.out-btn:hover{border-color:#00ff88;color:#00ff88}
+.out-btn.primary{border-color:rgba(0,255,136,.3);background:rgba(0,255,136,.08);color:#00ff88}
+.json-box{background:#12121a;border:1px solid #1e1e2e;border-radius:10px;padding:16px 14px;font-family:monospace;font-size:11px;line-height:1.8;overflow-x:auto;overflow-y:auto;max-height:460px;white-space:pre;color:#b8b8d0}
+.stats{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
+.stat{background:#12121a;border:1px solid #1e1e2e;border-radius:99px;padding:4px 12px;font-family:monospace;font-size:10px;color:#5a5a7a}
+.stat span{color:#00ff88;font-weight:700}
+.toast{position:fixed;bottom:20px;right:20px;background:#12121a;border:1px solid rgba(0,255,136,.3);border-radius:8px;padding:10px 16px;font-family:monospace;font-size:11px;color:#00ff88;z-index:9999;opacity:0;transform:translateY(20px);transition:all .3s;pointer-events:none}
+.toast.show{opacity:1;transform:translateY(0)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{width:14px;height:14px;border:2px solid rgba(0,0,0,.2);border-top-color:#0a0a0f;border-radius:50%;animation:spin .6s linear infinite}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="badge"><span class="dot"></span>AI-POWERED OCR</div>
+  <h1>Receipt <span>→</span> JSON</h1>
+  <p class="sub">// upload receipt → get structured JSON instantly</p>
+
+  <div class="api-row">
+    <input class="api-input" id="apiKey" type="password" placeholder="Paste your Anthropic API Key here...">
+    <button class="api-btn" onclick="saveKey()">SAVE KEY</button>
+  </div>
+
+  <div class="zone" id="zone" onclick="document.getElementById('fi').click()">
+    <div class="zone-icon">🧾</div>
+    <div class="zone-title">Drop receipt images here</div>
+    <div class="zone-sub">or tap to browse · JPG, PNG, WEBP · multiple OK</div>
+    <input type="file" id="fi" accept="image/*" multiple style="display:none">
+  </div>
+
+  <div class="grid" id="grid"></div>
+  <button class="scan-btn" id="scanBtn" onclick="scan()">⚡ SCAN & EXTRACT JSON</button>
+  <div class="progress" id="prog"><div class="progress-fill" id="progFill"></div></div>
+  <div class="error" id="err"></div>
+
+  <div class="output" id="output">
+    <div class="out-header">
+      <div class="out-title">✦ JSON OUTPUT</div>
+      <div class="out-actions">
+        <button class="out-btn" onclick="copyJson()">⎘ COPY</button>
+        <button class="out-btn primary" onclick="dlJson()">↓ DOWNLOAD</button>
+      </div>
+    </div>
+    <div class="json-box" id="jsonBox"></div>
+    <div class="stats" id="stats"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const PROMPT = `You are a receipt/invoice data extraction engine.
+Output ONLY valid JSON array. No markdown, no code fences, no explanation.
+First char=[  Last char=]
+Zero Arabic characters. Arabic numerals→Western.
+
+SCHEMA:
+[{"position_index":1,"shop_name":"string or null","date":"YYYY-MM-DD or null","time":"HH:MM or null","items":[{"product_name":"string or null","qty":null,"unit_type":"string or null","unit_price":null,"item_vat":null,"item_vat_percentage":null,"item_discount":null,"item_discount_percentage":null,"item_total":null}],"subtotal":null,"total_vat":null,"total_vat_percentage":null,"total_discount_amount":null,"total_discount_percentage":null,"grand_total":null,"payment_method":"string or null"}]
+
+NULL RULES: not printed→null, value is 0.00→null, unreadable→null. NEVER use 0 or "".`;
+
+let files=[],previews=[],states=[],lastJson='';
+
+function saveKey(){
+  const k=document.getElementById('apiKey').value.trim();
+  if(!k){showToast('❌ Enter API key first!');return;}
+  localStorage.setItem('ak',k);
+  showToast('✓ API Key saved!');
+}
+
+function loadKey(){
+  const k=localStorage.getItem('ak');
+  if(k) document.getElementById('apiKey').value=k;
+}
+loadKey();
+
+const zone=document.getElementById('zone');
+zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('drag')});
+zone.addEventListener('dragleave',()=>zone.classList.remove('drag'));
+zone.addEventListener('drop',e=>{e.preventDefault();zone.classList.remove('drag');addFiles(Array.from(e.dataTransfer.files))});
+document.getElementById('fi').addEventListener('change',e=>{addFiles(Array.from(e.target.files));e.target.value='';});
+
+function addFiles(fs){
+  fs.filter(f=>f.type.startsWith('image/')).forEach(f=>{
+    if(!files.find(x=>x.name===f.name&&x.size===f.size)){
+      files.push(f);previews.push(URL.createObjectURL(f));states.push('idle');
+    }
+  });
+  renderGrid();updateBtn();
+}
+
+function removeFile(i){files.splice(i,1);previews.splice(i,1);states.splice(i,1);renderGrid();updateBtn();}
+
+function renderGrid(){
+  const g=document.getElementById('grid');g.innerHTML='';
+  files.forEach((_,i)=>{
+    const s=states[i];
+    const bc=s==='done'?'rgba(0,255,136,0.5)':s==='error'?'#ff4466':s==='processing'?'#00ff88':'#1e1e2e';
+    const lbl=s==='done'?'✓ DONE':s==='error'?'✗ ERR':s==='processing'?'SCANNING':`#${i+1}`;
+    const lc=s==='done'||s==='processing'?'#00ff88':s==='error'?'#ff4466':'#5a5a7a';
+    const lb=s==='done'?'rgba(0,255,136,0.15)':s==='error'?'rgba(255,68,102,0.15)':s==='processing'?'rgba(0,255,136,0.2)':'rgba(0,0,0,0.5)';
+    g.innerHTML+=`<div class="thumb" style="border-color:${bc}">
+      <img src="${previews[i]}">
+      <div class="thumb-badge" style="background:${lb};color:${lc}">${lbl}</div>
+      <button class="remove" onclick="removeFile(${i})">×</button>
+    </div>`;
+  });
+}
+
+function updateBtn(){
+  const b=document.getElementById('scanBtn');
+  if(files.length>0){b.classList.add('ready');}else{b.classList.remove('ready');}
+}
+
+function fileToBase64(f){
+  return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result.split(',')[1]);r.onerror=rej;r.readAsDataURL(f);});
+}
+
+function hl(json){
+  return json.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/(\"(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\\"])*\"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?)/g,m=>{
+      if(/^"/.test(m)){if(/:$/.test(m))return`<span style="color:#79c0ff">${m}</span>`;return`<span style="color:#a5d6ff">${m}</span>`;}
+      if(/null/.test(m))return`<span style="color:#ff7b72">${m}</span>`;
+      if(/true|false/.test(m))return`<span style="color:#56d364">${m}</span>`;
+      return`<span style="color:#f8c555">${m}</span>`;
+    });
+}
+
+async function scan(){
+  const apiKey=document.getElementById('apiKey').value.trim();
+  if(!apiKey){showToast('❌ API Key দিন আগে!');return;}
+  if(!files.length)return;
+  const btn=document.getElementById('scanBtn');
+  btn.innerHTML='<div class="spinner"></div> SCANNING...';
+  btn.classList.remove('ready');btn.onclick=null;
+  document.getElementById('err').style.display='none';
+  document.getElementById('output').style.display='none';
+  const prog=document.getElementById('prog');const fill=document.getElementById('progFill');
+  prog.style.display='block';fill.style.width='0%';
+  const all=[];let idx=1;
+
+  for(let i=0;i<files.length;i++){
+    states[i]='processing';renderGrid();
+    fill.style.width=`${Math.round(i/files.length*100)}%`;
+    try{
+      const b64=await fileToBase64(files[i]);
+      const mt=files[i].type||'image/jpeg';
+      const r=await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,system:PROMPT,
+          messages:[{role:'user',content:[
+            {type:'image',source:{type:'base64',media_type:mt,data:b64}},
+            {type:'text',text:`Extract receipt. position_index:${idx}. Raw JSON array only.`}
+          ]}]})
+      });
+      if(!r.ok)throw new Error(r.status);
+      const d=await r.json();
+      let t=d.content.map(c=>c.text||'').join('').trim().replace(/```json|```/g,'').trim();
+      const p=JSON.parse(t);
+      if(Array.isArray(p)){p.forEach(x=>{x.position_index=idx++;all.push(x)});}
+      else{p.position_index=idx++;all.push(p);}
+      states[i]='done';
+    }catch(e){states[i]='error';console.error(e);}
+    fill.style.width=`${Math.round((i+1)/files.length*100)}%`;
+    renderGrid();
+  }
+
+  btn.innerHTML='⚡ SCAN & EXTRACT JSON';btn.classList.add('ready');btn.onclick=scan;
+  prog.style.display='none';
+
+  if(!all.length){
+    const er=document.getElementById('err');er.textContent='✗ Could not extract. Try clearer image.';er.style.display='block';return;
+  }
+  lastJson=JSON.stringify(all,null,2);
+  document.getElementById('jsonBox').innerHTML=hl(lastJson);
+  document.getElementById('output').style.display='block';
+  const items=all.reduce((s,r)=>s+(r.items?.length||0),0);
+  document.getElementById('stats').innerHTML=
+    `<div class="stat">Receipts: <span>${all.length}</span></div>
+     <div class="stat">Items: <span>${items}</span></div>
+     <div class="stat">With Total: <span>${all.filter(r=>r.grand_total!==null).length}</span></div>`;
+  showToast(`✓ ${all.length} receipt extracted!`);
+  document.getElementById('output').scrollIntoView({behavior:'smooth'});
+}
+
+function copyJson(){navigator.clipboard.writeText(lastJson).then(()=>showToast('✓ Copied!'));}
+function dlJson(){
+  const b=new Blob([lastJson],{type:'application/json'});
+  const u=URL.createObjectURL(b);const a=document.createElement('a');
+  a.href=u;a.download=`receipts_${Date.now()}.json`;a.click();URL.revokeObjectURL(u);
+  showToast('✓ Downloaded!');
+}
+function showToast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
+</script>
+</body>
+</html>
